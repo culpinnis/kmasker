@@ -1,4 +1,4 @@
-/*  Modified by Chris Ulpinnis for cMasker project to generate mask fasta files with jellyfish.
+/*  Modified by Chris Ulpinnis for cMasker project to mask fasta files with jellyfish.
         
     Based on jellyfishs example code (query_per_sequence.cc)
  
@@ -35,9 +35,7 @@
 #include <string>
 using namespace std;
 //#include "sequence_mers.hpp"
-
 namespace err = jellyfish::err;
-
 using jellyfish::mer_dna;
 using jellyfish::mer_dna_bloom_counter;
 
@@ -62,15 +60,18 @@ typedef jellyfish::whole_sequence_parser<jellyfish::stream_manager<char**> > seq
 template<typename PathIterator, typename Database>
 void query_from_sequence(PathIterator file_begin, PathIterator file_end, const Database& db,
                          bool canonical, bool occfile, int rt, int norm) {
-  jellyfish::stream_manager<PathIterator> streams(file_begin, file_end);
-  sequence_parser                         parser(4, 100, 1, streams);
-        ofstream occfilestream;
-        string occoutname = string(dirname(*file_begin)) + "/" + string(basename(*file_begin)) +  "_normalized.occ";
+    jellyfish::stream_manager<PathIterator> streams(file_begin, file_end);
+    sequence_parser                         parser(4, 100, 1, streams);
+    ofstream occfilestream;
+    ofstream occnormfilestream;
+    string occnormoutname = string(dirname(*file_begin)) + "/" + string(basename(*file_begin)) + "_N" + to_string(norm) +"normalized.occ";
+    string occoutname = string(dirname(*file_begin)) + "/" + string(basename(*file_begin)) +".occ";
     if(occfile == true){
         occfilestream.open(occoutname);
+        occnormfilestream.open(occnormoutname);
     }
     ofstream fastaout;
-    string fastaoutname = string(dirname(*file_begin)) + "/freakmaskedRT" + to_string(rt) + "." + string(basename(*file_begin));
+    string fastaoutname = string(dirname(*file_begin)) + "/freakmasked_RT" + to_string(rt) + "." + string(basename(*file_begin));
     fastaout.open(fastaoutname);
   //sequence_mers                           mers(canonical);
   //const sequence_mers                     mers_end(canonical);
@@ -81,6 +82,7 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
       fastaout << ">" << j->data[i].header << "\n";
         if(occfile) {
             occfilestream << ">" << j->data[i].header << "\n";
+            occnormfilestream << ">" << j->data[i].header << "\n";
         }
         /* What we trying to archive with the code modification is:
          -get the first kmer of the sequence string
@@ -100,6 +102,7 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
             //std::cout << "-1";
             if (occfile) {
                 occfilestream << "0";
+                occnormfilestream << "0";
             }
             fastaout << j->data[i].seq.substr(0,1);
         }
@@ -107,7 +110,8 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
             //std::cout << db.check(mer) << " : " << mer.to_str()<< " : " << mershift;
             mershift = 0; //necessary because mershift is std::string::npos after the above condition
             if(occfile){
-                occfilestream << IntDivRoundUp(db.check(mer),norm);
+                occnormfilestream << IntDivRoundUp(db.check(mer),norm);
+                occfilestream << db.check(mer);
             }
             if(IntDivRoundUp(db.check(mer),norm) > rt) {
                 fastaout << "X";
@@ -119,10 +123,17 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
         //now calculate how many times the mer must be shifted
         int k = 2;
         bool whitespace = true;
-        for (char& c: j->data[i].seq.substr(mer.k())) {
+        string* seq = &j->data[i].seq;
+        int length = seq->length();
+        //for (char& c: j->data[i].seq.substr(mer.k()), s: j->data[i].seq.substr(1)) {
+        for(int cc = mer.k(),cs=1 ; cc < length; ++cc, ++cs) {
+        //for(char& c: j->data[i].seq.substr(1)) {
+            char c =  seq->at(cc);
+            char s =  seq->at(cs);
             if (whitespace == true) {
                 if (occfile) {
                     occfilestream << " ";
+                    occnormfilestream << " ";
                 }
             }
             if (c == 'N') { //got a new N, have to shift mer.k()-1 times from now
@@ -133,8 +144,9 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
                 //std::cout << "-1";
                 if(occfile) {
                     occfilestream << "0";
+                    occnormfilestream << "0";
                 }
-                fastaout << "N";
+                fastaout << s;
 
             }
             else {
@@ -146,21 +158,23 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
                     //std::cout << "-1";
                     if(occfile) {
                         occfilestream << "0";
+                        occnormfilestream << "0";
                     }
-                    fastaout << c;
+                    fastaout << s;
                 }
                 else { //allright, no Ns in the kmer
                     mer.shift_left(c);
                     /*std::cout << db.check(mer) << " : " << mer.to_str()<< " : " << mershift;
                     std::cout << "\n";*/
                     if (occfile) {
-                        occfilestream << IntDivRoundUp(db.check(mer),norm);
+                        occnormfilestream << IntDivRoundUp(db.check(mer),norm);
+                        occfilestream << db.check(mer);
                     }
                     if (IntDivRoundUp(db.check(mer),norm) > rt) {
                         fastaout << "X";
                     }
                     else {
-                        fastaout << c;
+                        fastaout << s;
                     }
 
                 }
@@ -171,6 +185,7 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
             if(k == 26) { //check if we have to make a line break
                 if (occfile) {
                     occfilestream << "\n";
+                    occnormfilestream << "\n";
                 }
                 whitespace=false;
                 k=1;
@@ -180,17 +195,20 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
             if(whitespace == false) {
                 if (occfile) {
                     occfilestream << "0";
+                    occnormfilestream << "0";
                 }
                 whitespace = true;
             }
             else {
                 if (occfile) {
                     occfilestream << " " << "0";
+                    occnormfilestream << " " << "0";
                 }
             }
             if(k == 26) {
                 if (occfile) {
                     occfilestream << "\n";
+                    occnormfilestream << "\n";
                 }
                 whitespace=false;
                 k=1;
@@ -201,6 +219,7 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
         
         if (occfile) {
             occfilestream << "\n";
+            occnormfilestream << "\n";
         }
         fastaout << "\n";
      }
@@ -208,6 +227,7 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
     fastaout.close();
     if (occfile) {
         occfilestream.close();
+        occnormfilestream.close();
     }
 }
 
