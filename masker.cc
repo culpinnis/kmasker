@@ -64,14 +64,22 @@ void query_from_sequence(PathIterator file_begin, PathIterator file_end, const D
     sequence_parser                         parser(4, 100, 1, streams);
     ofstream occfilestream;
     ofstream occnormfilestream;
-    string occnormoutname = string(dirname(*file_begin)) + "/" + string(basename(*file_begin)) + "_N" + to_string(norm) +"normalized.occ";
-    string occoutname = string(dirname(*file_begin)) + "/" + string(basename(*file_begin)) +".occ";
+    char* path = *file_begin;
+    string file = basename(path);
+    string dir = dirname(path);
+    //cout << dir << "/" << file << "\n";
+    string occnormoutname = dir + "/" + file + "_N" + to_string(norm) +"normalized.occ";
+    string occoutname = dir + "/" + file +".occ";
     if(occfile == true){
         occfilestream.open(occoutname);
         occnormfilestream.open(occnormoutname);
     }
     ofstream fastaout;
-    string fastaoutname = string(dirname(*file_begin)) + "/freakmasked_RT" + to_string(rt) + "." + string(basename(*file_begin));
+    //cout << "input was: " << string(dirname(*file_begin)) << "/" << string(basename(*file_begin)) << "\n";
+    //cout << string(*file_begin) << "\n";
+    //cout << string(*file_begin) << "\n";
+    string fastaoutname = dir + "/freakmasked_RT" + to_string(rt) + "." + file;
+    cout << "Out is: " << fastaoutname << "\n";
     fastaout.open(fastaoutname);
   //sequence_mers                           mers(canonical);
   //const sequence_mers                     mers_end(canonical);
@@ -251,7 +259,8 @@ int main(int argc, char *argv[])
                 break;
             case 'f':
                 fasta = optarg;
-                break;
+                cout << "Input is: " << fasta << "\n";
+		break;
             case 'j':
                 jellydb = optarg;
                 break;
